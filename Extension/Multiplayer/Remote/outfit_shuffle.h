@@ -43,7 +43,7 @@ inline std::optional<ShuffleMode> parse_shuffle_mode(std::string_view word) noex
 // Extension/World/texture_handle_limit.h), the shuffle picks only items already put on a skater,
 // whose textures stay loaded: any other item can bring textures of its own, and the game freezes
 // when it needs one more than it can hold.
-inline constexpr unsigned shuffle_texture_ceiling = 80;
+inline constexpr unsigned shuffle_texture_ceiling = 90;
 // Whether `taken` of `limit` streamed textures leave room to shuffle from the whole catalog. An
 // unknown limit (0) does.
 inline constexpr bool shuffle_texture_room(std::uint32_t taken, std::uint32_t limit) noexcept {

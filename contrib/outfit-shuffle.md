@@ -80,7 +80,7 @@ One setting, **Shuffle outfits**, with three values:
   when it needs one streamed texture more than it can hold (`texture_handle_limit`). The game does
   not let an item's textures go once loaded, even when nobody wears it any more, so every item put
   on a skater stays loaded. `apply_cosmetic_recipe` notes each one as it is put on, shuffled or not
-  (`note_loaded`), and the local player's own. Past `shuffle_texture_ceiling` (80%) the catalog is
+  (`note_loaded`), and the local player's own. Past `shuffle_texture_ceiling` (90%) the catalog is
   cut to those (`ShuffleCatalog::only`) before `shuffle_recipe`. The list starts again in a new
   level (`note_cosmetics_level`, the local skater's context): whether a level load lets them go is
   not known, and a smaller pool is the safe side. Nobody is re-dressed when the line is crossed, so

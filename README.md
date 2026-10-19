@@ -54,19 +54,6 @@ One setting, **Shuffle outfits**, with three values:
 
 - Your choices are saved with your profile.
 
-## Keeping the game stable
-
-skate. can hold a fixed number of textures. When a map and its mods need one more, the game freezes
-(ReSkate warns at 90%). The game does not let go of an item's textures once it has loaded them, so a
-shuffle that kept picking new items would slowly fill the game up.
-
-When the game reaches **80%** of its texture limit, the shuffle switches to picking only items already
-loaded in the current level, so it brings in no new textures. Chat tells you once when this happens.
-Players who are already dressed keep their picks, and modes and rerolls still work, from the smaller
-pool.
-
-The console command `textures` shows how many textures are in use.
-
 ## Installing
 
 Build the launcher and `ReSkate.dll` from this repository (see [Building from source](#building-from-source)),
