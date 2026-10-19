@@ -224,11 +224,11 @@ int main() {
               "The board keeps mods only, and turning it on is a new shuffle");
     }
 
-    // Room for textures: past 80% of the limit only worn items are picked.
-    check(shuffle_texture_room(0, 20480) && shuffle_texture_room(16383, 20480), "Below 80% there is room");
-    check(!shuffle_texture_room(16384, 20480) && !shuffle_texture_room(20480, 20480) && !shuffle_texture_room(32764, 32764),
-          "At 80% and past it there is none");
-    check(shuffle_texture_room(16384, 32764), "The raised limit leaves more room");
+    // Room for textures: past 90% of the limit only worn items are picked.
+    check(shuffle_texture_room(0, 20480) && shuffle_texture_room(18431, 20480), "Below 90% there is room");
+    check(!shuffle_texture_room(18432, 20480) && !shuffle_texture_room(20480, 20480) && !shuffle_texture_room(32764, 32764),
+          "At 90% and past it there is none");
+    check(shuffle_texture_room(18432, 32764), "The raised limit leaves more room");
     check(shuffle_texture_room(0, 0) && shuffle_texture_room(99999, 0), "An unknown limit leaves room");
 
     if (failures) return 1;

@@ -635,7 +635,7 @@ void shuffle_room_checks() {
                              [](const auto &line) { return line.text.find("only use items the game has already loaded") != std::string::npos; });
     };
 
-    limit.taken = 18000; // past 80%, with the shuffle off
+    limit.taken = 19000; // past 90%, with the shuffle off
     check_shuffle_room(s);
     check(!s.shuffle_loaded_only && !told(), "The player was told about a shuffle that is off");
 
@@ -645,14 +645,14 @@ void shuffle_room_checks() {
     check_shuffle_room(s);
     check(!s.shuffle_loaded_only && !told(), "The player was told with room to spare");
 
-    limit.taken = 16384; // 80%
+    limit.taken = 18432; // 90%
     check_shuffle_room(s);
     check(s.shuffle_loaded_only && told() == 1 && revision == before && s.shuffle_mode == ShuffleMode::everything,
           "Near the texture limit the player was not told once, or everyone was re-dressed");
     check_shuffle_room(s);
-    limit.taken = 15500; // under 80%, not well under (75%)
+    limit.taken = 17800; // under 90%, not well under (85%)
     check_shuffle_room(s);
-    limit.taken = 16384;
+    limit.taken = 18432;
     check_shuffle_room(s);
     check(told() == 1, "The notice repeated around the line");
 
@@ -678,7 +678,7 @@ void shuffle_room_checks() {
     limit.taken = 1000; // well under: told again next time
     check_shuffle_room(s);
     check(!s.shuffle_loaded_only, "Well under the limit the notice was not re-armed");
-    limit.taken = 16384;
+    limit.taken = 18432;
     check_shuffle_room(s);
     check(told() == 2, "The player was not told again after use fell and rose");
 
