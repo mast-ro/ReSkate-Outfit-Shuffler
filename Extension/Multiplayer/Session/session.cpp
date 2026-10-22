@@ -1056,6 +1056,7 @@ void tick(std::uintptr_t base, std::uintptr_t client, bool ready, std::string_vi
         ~VoicePlaybackTick() { voice.process_native(base); }
     } voice_playback_tick{s.voice, base};
     s.base = base;
+    s.client = client;
     {
         // (Its hooks, and the throwdown lab's, go in together: one pause of the game's threads.)
         HookBatch batch;

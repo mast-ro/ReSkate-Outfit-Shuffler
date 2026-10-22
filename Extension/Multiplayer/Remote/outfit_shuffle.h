@@ -116,7 +116,7 @@ private:
     std::map<std::uint32_t, std::vector<std::size_t>> by_category_;
 };
 
-// The only slots the shuffle touches (template slot ids, as `mp slots` prints them), skater and
+// The only slots the shuffle touches (template slot ids, as `mp cosmetic-slots` prints them), skater and
 // board alike. Every other slot shows what the player wears, or the usual stand-in, as with the
 // shuffle off.
 inline constexpr std::array<std::uint32_t, 17> shuffled_slot_ids{

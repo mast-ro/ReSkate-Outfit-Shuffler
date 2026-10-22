@@ -38,7 +38,7 @@ One setting, **Shuffle outfits**, with three values:
 - A player keeps the same picks until you reroll. Changing the mode keeps them too, so going from
   Everything to Not installed and back gives the same items.
 - Only the slots listed in `shuffled_slot_ids` are ever shuffled (clothes, tattoos and the board's
-  parts); any other slot shows as worn. `mp slots` lists every slot and marks the shuffled ones.
+  parts); any other slot shows as worn. `mp cosmetic-slots` lists every slot and marks the shuffled ones.
 
 ## How it works
 
@@ -48,7 +48,7 @@ One setting, **Shuffle outfits**, with three values:
   slot's category). Then the existing step swaps each of them for a stand-in.
 - `shuffle_slots` says which slots the mode shuffles: with Not installed the lacking ones; with
   Everything those and every slot that holds an item. Either way, only slots listed in
-  `shuffled_slot_ids` (outfit_shuffle.h, by the template slot ids `mp slots` prints); any other slot
+  `shuffled_slot_ids` (outfit_shuffle.h, by the template slot ids `mp cosmetic-slots` prints); any other slot
   shows the item worn, or its stand-in, as with the shuffle off. `shuffle_recipe` gives each of them an installed
   item that fits and is not the one already there. The recipe the peer sent is never edited.
 - Items reserved for their owners (`profile_runtime::reserved_cosmetic`) are still swapped for
@@ -74,3 +74,43 @@ One setting, **Shuffle outfits**, with three values:
   `ShuffleMode` value, and `outfit_shuffle_mods_only`, and send the console words above.
 - If anything fails (the catalog is not ready, or the result does not validate), the outfit is
   shown with the stand-ins and a warning is logged, three times at most.
+
+## Looking at the slots: `mp cosmetic-slots`
+
+A debug command that shows how the game dresses your own skater and board, one row per slot. It
+reads only the local player and changes nothing, and needs a loaded map but no session
+(`describe_cosmetic_slots` in native_cosmetics.cpp).
+
+For the skater and then the board, a header:
+
+```
+Skater (recipe key 1234): 24 slots, 18 worn items
+```
+
+- **recipe key**: the template the outfit belongs to. The skater and the board each have one.
+- **slots**: how many slots the template has, meaning places an item can go (a hat, a top, the
+  deck, a tattoo).
+- **worn items**: how many entries your current outfit has.
+
+Then one row per slot:
+
+```
+  [ 3] slot 0xac4c6e13  category 0x1a2b3c4d  wearing "Mod_Hoodie_A"  fits 212  shuffled  from Cool Hoodies by someone
+```
+
+| Part | Meaning |
+| --- | --- |
+| `[ 3]` | The slot's position in the template. |
+| `slot 0x…` | The slot's id, the same in every game. Outfits sent between players name their slots by it, and `shuffled_slot_ids` lists slots by it. |
+| `category 0x…` | The kind of item the slot takes. An item goes in the slot only if this is one of its categories; the shuffle uses the same check to choose what can replace an item. |
+| `wearing "…"` / `wearing nothing` | The item in the slot now, by its asset name, or nothing. |
+| `fits N` | How many installed items fit the slot's category: the pool a shuffle draws from. Items reserved for their owners are not counted. The count ignores **Mod items only**, so with that on the real pool is smaller. |
+| `shuffled` | The shuffle can change this slot. A slot without it always shows what the player wears. |
+| `from <mod>` / `changed by <mod>` | The mod the worn item comes from, or the mod that changes one of the game's own items (`item_origins::find`, the same lookup as the item cards). Nothing for an untouched game item, and nothing until ReSkate has merged mods at least once. |
+
+What it helps with:
+
+- **Why a slot never shuffles:** it lacks the `shuffled` mark, or `fits` is 0 or 1. With only one
+  item that fits there is nothing else to pick.
+- **Whether a mod's item fits a slot:** compare the slot's `category` with the item's categories.
+- **Adding a slot to `shuffled_slot_ids`:** take its id from the `slot 0x…` column.

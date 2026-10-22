@@ -6,6 +6,7 @@
 #include "Engine/Game/Build/20260929/engine.h"
 #include "Engine/Game/Build/20260929/native_cosmetics.h"
 #include "Engine/Vfs/content_catalogs.h"
+#include "Extension/Customization/item_origins.h"
 #include "Extension/Customization/local_customization_runtime.h"
 #include "Extension/Customization/local_player_card_runtime.h"
 #include <Windows.h>
@@ -106,10 +107,14 @@ std::string describe_cosmetic_slots(std::uintptr_t base, const NativeFrame &loca
                 const auto worn = std::find_if(recipe.items.begin(), recipe.items.end(),
                                                [&](const CosmeticSlot &item) { return item.slot == id; });
                 const auto *pool = catalog.in_category(categories[i]);
-                out += std::format("  [{:2}] slot 0x{:08x}  category 0x{:08x}  {}  fits {}{}\n", i, id, categories[i],
-                                   worn == recipe.items.end() || worn->asset.empty() ? std::string("wearing nothing")
-                                                                                     : "wearing \"" + worn->asset + "\"",
-                                   pool ? pool->size() : 0, shuffles_slot(id) ? "  shuffled" : "");
+                const bool wearing = worn != recipe.items.end() && !worn->asset.empty();
+                // The mod the worn item is from, or that changes one of the game's own.
+                std::string mod;
+                if (const auto origin = wearing ? item_origins::find(worn->asset) : nullptr)
+                    mod = std::format("  {} {}", item_origins::game_item(worn->asset) ? "changed by" : "from", origin->name);
+                out += std::format("  [{:2}] slot 0x{:08x}  category 0x{:08x}  {}  fits {}{}{}\n", i, id, categories[i],
+                                   wearing ? "wearing \"" + worn->asset + "\"" : std::string("wearing nothing"),
+                                   pool ? pool->size() : 0, shuffles_slot(id) ? "  shuffled" : "", mod);
             }
         }
     } catch (const std::exception &e) {

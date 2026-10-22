@@ -745,7 +745,7 @@ unsigned next_maps_serial() noexcept { return session_detail::next_maps_serial_v
 std::string command(std::string_view action, std::string_view argument, std::string_view password) {
     // Debug: the local skater's cosmetic slots. Reads only the local player, so it needs no
     // session (or Steam). Runs on the client thread, as the console's game-thread commands do.
-    if (action == "slots") {
+    if (action == "cosmetic-slots") {
         const auto &s = session();
         if (!s.base || !s.client) return "Load a map first.";
         return describe_cosmetic_slots(s.base, capture_local(s.base, s.client, false));

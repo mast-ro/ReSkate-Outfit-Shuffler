@@ -55,8 +55,8 @@ void register_multiplayer_commands(Commands &registry) {
                           Command{"retry", "Retry remote skater creation after an error"},
                           Command{"test", "Test a Steam socket-pair round trip"},
                           Command{"status", "Show multiplayer connection and animation status"},
-                          Command{"slots", "Debug: your skater's and board's cosmetic slots, the category each takes "
-                                           "(what shuffled outfits match on), the item worn and how many installed items fit"}}) {
+                          Command{"cosmetic-slots", "Debug: your skater's and board's cosmetic slots, the category each takes "
+                                                    "(what shuffled outfits match on), the item worn and its mod, and how many installed items fit"}}) {
         std::vector<Argument> args;
         if (std::string_view(c.name) == "join")
             args.push_back(argument("join_code"));
@@ -100,7 +100,7 @@ void register_multiplayer_commands(Commands &registry) {
                     arguments += ' ';
                 arguments += part;
             }
-            // One console line per line of the result (mp slots prints a table).
+            // One console line per line of the result (mp cosmetic-slots prints a table).
             const auto result = multiplayer::command(name, arguments);
             for (std::size_t at = 0;;) {
                 const auto end = result.find('\n', at);
