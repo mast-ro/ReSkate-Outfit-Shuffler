@@ -60,7 +60,7 @@ inline constexpr unsigned plugin_burst = 200;
 // players form one).
 inline constexpr std::uint32_t lobby_party = 1;
 // How often a new shuffle mode or reroll re-dresses the next player: four a second, so a full
-// server takes about a minute, and the textures the new items bring arrive a few at a time.
+// server takes about a minute
 inline constexpr std::uint64_t shuffle_redress_interval_us = 250000;
 struct Peer {
     // Guests: this owner's layout as relayed by the host. Host: the owner's own
@@ -304,7 +304,6 @@ struct Session {
     ShuffleMode shuffle_mode{};
     std::uint64_t shuffle_epoch{1};
     bool shuffle_mods_only{};
-    bool shuffle_loaded_only{};
     // A new mode or reroll re-dresses one player at a time, no sooner than this: every
     // re-dressed player can bring textures of their own. Spawns and real outfit changes are not held.
     std::uint64_t next_shuffle_redress{};
@@ -483,12 +482,7 @@ void refresh_friends(Session &s);
 bool identity_link(Session &s, std::uint64_t other);
 // `marks`: whether the line may show the badge the backend gives its sender (player_role).
 void add_chat(Session &s, std::uint64_t sender, std::string name, std::string text, bool local = false, bool marks = true);
-// Tells the player once when the game's streamed textures come close to their limit
-// (shuffle_texture_ceiling), where shuffled outfits pick only items already loaded
-// (native_cosmetics.cpp), and again only after use has fallen well below it. Client thread.
-void check_shuffle_room(Session &s);
-// The shuffle as the log shows it: "mode all, mod items only, epoch 123", and ", loaded items
-// only" near the texture limit.
+// The shuffle as the log shows it: "mode all, mod items only, epoch 123".
 std::string shuffle_state(const Session &s);
 // The colour and badge of one of the backend's categories.
 std::pair<std::uint32_t, std::string> mark_role(IdentityList list);

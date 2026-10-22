@@ -39,17 +39,6 @@ inline std::optional<ShuffleMode> parse_shuffle_mode(std::string_view word) noex
     return std::nullopt;
 }
 
-// When the game's streamed textures are this full (percent of the limit,
-// Extension/World/texture_handle_limit.h), the shuffle picks only items already put on a skater,
-// whose textures stay loaded: any other item can bring textures of its own, and the game freezes
-// when it needs one more than it can hold.
-inline constexpr unsigned shuffle_texture_ceiling = 90;
-// Whether `taken` of `limit` streamed textures leave room to shuffle from the whole catalog. An
-// unknown limit (0) does.
-inline constexpr bool shuffle_texture_room(std::uint32_t taken, std::uint32_t limit) noexcept {
-    return !limit || std::uint64_t{taken} * 100 < std::uint64_t{limit} * shuffle_texture_ceiling;
-}
-
 // What to shuffle for one player: the mode, and the player's seed (shuffle_seed). Both must
 // say so; a default one shuffles nothing. `mods_only` picks only from items a mod installed
 // (ShuffleCatalog::mods), whichever slots the mode covers.
@@ -100,11 +89,6 @@ public:
     const std::vector<std::size_t> *in_category(std::uint32_t category) const {
         const auto found = by_category_.find(category);
         return found == by_category_.end() ? nullptr : &found->second;
-    }
-    // The same catalog with only the items named in `names` (sorted). Names it does not hold
-    // are not added: an item outside the catalog (reserved, or not installed) stays out.
-    ShuffleCatalog only(const std::vector<std::string> &names) const {
-        return keep_if([&](std::size_t index) { return std::binary_search(names.begin(), names.end(), names_[index]); });
     }
     // The same catalog with only the items a mod installed. Empty when there are none, or when
     // nothing could be judged modded (no content pack installed).

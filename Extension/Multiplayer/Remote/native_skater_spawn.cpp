@@ -493,7 +493,6 @@ void update_remote_cosmetics(std::uintptr_t base, const NativeFrame &local, cons
                     GetCurrentThreadId() == shared().engine_thread,
                 "Waiting for the remote cosmetic actors.");
         std::lock_guard lock(r.mutex);
-        note_cosmetics_level(local.context);
         // Each attempt checks the whole outfit against the catalog. One that was
         // rejected is retried at the next pass (a fresh actor may still be settling),
         // then every 5 s until the peer sends another; the detail keeps the rejection.

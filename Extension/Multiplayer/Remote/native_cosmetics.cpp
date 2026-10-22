@@ -8,7 +8,6 @@
 #include "Engine/Vfs/content_catalogs.h"
 #include "Extension/Customization/local_customization_runtime.h"
 #include "Extension/Customization/local_player_card_runtime.h"
-#include "Extension/World/texture_handle_limit.h"
 #include <Windows.h>
 #include <atomic>
 #include <format>
@@ -59,41 +58,7 @@ template <class Memory> const ShuffleCatalog &shuffle_catalog(const Memory &memo
                  retail.available ? "" : " (no content pack installed, so none can be told apart)");
     return mods_only ? mods : kept;
 }
-// Every item put on a skater or board in this level, shuffled or not, and the local player's
-// own. The game keeps an item's textures once they are loaded, so near its limit of streamed
-// textures the shuffle picks only from these (loaded_items). A new level (another context) starts
-// it again: the level's load may have let them go, and a smaller pool is the safe side to err on.
-// Engine thread.
-struct Loaded {
-    std::uintptr_t context{};
-    std::set<std::string> names;
-};
-Loaded &loaded() {
-    static auto *kept = new Loaded;
-    return *kept;
-}
-void note_loaded(const CosmeticRecipe &recipe) {
-    for (const auto &item : recipe.items)
-        if (!item.asset.empty()) loaded().names.insert(item.asset);
-}
-// The items loaded this level, sorted, with whatever the local player's skater or board
-// (`local_entity`) wears now.
-template <class Memory> std::vector<std::string> loaded_items(const Memory &memory, std::uintptr_t local_entity) {
-    try {
-        note_loaded(memory.capture(local_entity));
-    } catch (const std::exception &) {
-        // (Their outfit is updating: what was noted before is still loaded.)
-    }
-    const auto &names = loaded().names;
-    return {names.begin(), names.end()};
-}
 } // namespace
-void note_cosmetics_level(std::uintptr_t context) {
-    auto &kept = loaded();
-    if (kept.context == context) return;
-    kept.context = context;
-    kept.names.clear();
-}
 std::optional<Appearance> capture_cosmetics(std::uintptr_t base, const NativeFrame &local,
                                             std::string &detail) {
     try {
@@ -219,20 +184,14 @@ void apply_cosmetic_recipe(std::uintptr_t base, std::uintptr_t entity, std::uint
                          missing, replacement.empty() ? "nothing" : replacement);
     }
     // Shuffled outfits and boards: the slots the mode covers (every worn item, or just those this
-    // PC lacks) take a random installed item that fits, in place of what is there now. Near the game's limit of streamed
-    // textures, only an item already put on a skater this level: it brings no textures of its own. Whatever
+    // PC lacks) take a random installed item that fits, in place of what is there now. Whatever
     // goes wrong, the outfit is shown with the stand-ins.
     const auto shuffled = shuffle.active() ? shuffle_slots(shuffle.mode, usable, lacking) : std::vector<bool>{};
     if (std::find(shuffled.begin(), shuffled.end(), true) != shuffled.end()) {
         auto as_sent = usable;
         try {
-            const auto textures = texture_handle_limit::use();
-            const auto &catalog = shuffle_catalog(memory, shuffle.mods_only);
-            if (!textures.known || shuffle_texture_room(textures.taken, textures.limit))
-                shuffle_recipe(usable, memory.slot_categories(resource), catalog, shuffle.seed, shuffled);
-            else
-                shuffle_recipe(usable, memory.slot_categories(resource), catalog.only(loaded_items(memory, local_entity)),
-                               shuffle.seed, shuffled);
+            shuffle_recipe(usable, memory.slot_categories(resource), shuffle_catalog(memory, shuffle.mods_only),
+                           shuffle.seed, shuffled);
             memory.validate(resource, usable);
         } catch (const std::exception &e) {
             usable = std::move(as_sent);
@@ -259,7 +218,6 @@ void apply_cosmetic_recipe(std::uintptr_t base, std::uintptr_t entity, std::uint
                      memory.get<std::uint8_t>(c, 0x10d) == 1 &&
                      memory.ptr(c, 0x158) != reinterpret_cast<std::uintptr_t>(borrowed.value.items),
                  "Native cosmetic copy did not take ownership.");
-    note_loaded(usable);
     logging::log(
         logging::Level::debug, logging::Channel::runtime,
         "Multiplayer: peer cosmetics queued; entity={:#x}, component={:#x}, template={:#x}, slots={}.",

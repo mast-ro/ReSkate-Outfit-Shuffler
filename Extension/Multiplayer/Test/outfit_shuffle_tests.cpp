@@ -181,23 +181,6 @@ int main() {
     const std::vector<std::uint32_t> unlisted{9, 9, 9};
     check(shuffle_recipe(stray, unlisted, cat, seed) == 0 && stray == worn(), "A slot with no category in the catalog is left alone");
 
-    // Near the texture limit the shuffle picks only from items already loaded.
-    {
-        const ShuffleCatalog both({{"Shirt", {tops}}, {"Pants", {bottoms}}, {"Overalls", {tops, bottoms}}, {"Cap", {hats}}});
-        const auto loaded = both.only({"Cap", "Overalls", "Unknown_Mod_Item"});
-        check(loaded.size() == 2, "Only the worn items that are in the catalog stay");
-        const auto *fits_top = loaded.in_category(tops), *fits_bottom = loaded.in_category(bottoms);
-        check(fits_top && fits_top->size() == 1 && loaded.name(fits_top->front()) == "Overalls" && fits_bottom &&
-                  fits_bottom->size() == 1 && loaded.name(fits_bottom->front()) == "Overalls",
-              "A kept item keeps every category it fits");
-        check(!loaded.in_category(shoes) && loaded.in_category(hats), "Categories with nothing worn are empty");
-        check(both.only({}).size() == 0, "Nothing worn: nothing to pick");
-        auto r = worn();
-        shuffle_recipe(r, categories, loaded, seed);
-        check(r.items[0].asset == "Overalls" && r.items[1].asset == "Overalls" && r.items[2].asset.empty(),
-              "Shuffling from what is worn picks only those items");
-    }
-
     // Mod items only: the shuffle picks from the items a mod installed, and a slot no mod item
     // fits keeps what it shows.
     {
@@ -213,7 +196,6 @@ int main() {
                   mods.in_category(bottoms)->size() == 1 && !mods.in_category(hats),
               "A mod item keeps every category it fits");
         check(ShuffleCatalog({{"Own_TopShirt_A", {tops}}}).mods().size() == 0, "No mod items: nothing to pick");
-        check(mixed.only({"Mod_Top", "Own_Hat_A"}).mods().size() == 1, "Loaded items keep whether a mod installed them");
         auto r = worn();
         r.items[2].asset = "Own_Hat_A";
         shuffle_recipe(r, categories, mods, seed);
@@ -223,13 +205,6 @@ int main() {
         check(mods_clothes.board().mods_only && mods_clothes != Shuffle{ShuffleMode::everything, seed},
               "The board keeps mods only, and turning it on is a new shuffle");
     }
-
-    // Room for textures: past 90% of the limit only worn items are picked.
-    check(shuffle_texture_room(0, 20480) && shuffle_texture_room(18431, 20480), "Below 90% there is room");
-    check(!shuffle_texture_room(18432, 20480) && !shuffle_texture_room(20480, 20480) && !shuffle_texture_room(32764, 32764),
-          "At 90% and past it there is none");
-    check(shuffle_texture_room(18432, 32764), "The raised limit leaves more room");
-    check(shuffle_texture_room(0, 0) && shuffle_texture_room(99999, 0), "An unknown limit leaves room");
 
     if (failures) return 1;
     std::cout << "outfit shuffle tests passed\n";

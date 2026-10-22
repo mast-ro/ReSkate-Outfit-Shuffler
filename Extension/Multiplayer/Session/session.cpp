@@ -562,8 +562,6 @@ void render(Session &s, std::uintptr_t client, const NativeFrame &local, std::ui
     // changed outfit is one heavy native pass. When several players arrive together
     // (joining a busy server) run one pass per frame; the others wait for later frames.
     bool native_pass{};
-    // Near the game's limit of textures shuffled outfits pick only items already loaded.
-    check_shuffle_room(s);
     const auto shuffle_for = [](std::uint64_t id, ShuffleMode mode, std::uint64_t epoch, bool mods_only) {
         return mode == ShuffleMode::off ? Shuffle{} : Shuffle{mode, shuffle_seed(id, epoch), mods_only};
     };

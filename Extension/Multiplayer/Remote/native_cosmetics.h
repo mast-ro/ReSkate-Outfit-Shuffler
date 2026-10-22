@@ -12,7 +12,4 @@ std::string describe_cosmetic_slots(std::uintptr_t base, const NativeFrame &loca
 // One that cannot be shuffled is shown with the stand-ins.
 void apply_cosmetic_recipe(std::uintptr_t base, std::uintptr_t entity, std::uintptr_t local_entity,
                            const CosmeticRecipe &, const Shuffle &shuffle = {});
-// The level the outfits are put on in (the local skater's context). Items put on in another
-// level are no longer counted as loaded for the shuffle. Same thread as apply_cosmetic_recipe.
-void note_cosmetics_level(std::uintptr_t context);
 } // namespace dingosdk::multiplayer

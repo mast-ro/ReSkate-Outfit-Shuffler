@@ -12,8 +12,7 @@
 #include <set>
 
 namespace dingosdk::texture_handle_limit {
-Use simulated_use;
-Use use() noexcept { return simulated_use; }
+Use use() noexcept { return {}; }
 }
 
 namespace dingosdk {
@@ -617,11 +616,9 @@ struct Simulation {
                 }
     }
 };
-// Near the texture limit shuffled outfits pick only loaded items (native_cosmetics.cpp): the
-// session tells the player once, keeps everyone as dressed, and still takes modes and rerolls.
-void shuffle_room_checks() {
-    auto &limit = texture_handle_limit::simulated_use;
-    limit = {true, 20480, 1000};
+// Modes, rerolls and mod items only change the session's shuffle; render re-dresses players in
+// turn, so nobody's outfit revision moves.
+void shuffle_setting_checks() {
     auto storage = std::make_unique<Session>();
     auto &s = *storage;
     s.used_slots = 1;
@@ -630,40 +627,19 @@ void shuffle_room_checks() {
     outfit.appearance = {{skater_recipe_key, 2, {}, {{1, "Outfit", {}}}}, {board_recipe_key, 1, {}, {{2, "Deck", {}}}}};
     check(s.peers[0].appearance.push(outfit), "Shuffle fixture appearance rejected");
     auto &revision = s.peers[0].cosmetic_revision;
-    const auto told = [&] {
-        return std::count_if(s.chat.begin(), s.chat.end(),
-                             [](const auto &line) { return line.text.find("only use items the game has already loaded") != std::string::npos; });
-    };
 
-    limit.taken = 19000; // past 90%, with the shuffle off
-    check_shuffle_room(s);
-    check(!s.shuffle_loaded_only && !told(), "The player was told about a shuffle that is off");
-
-    limit.taken = 1000;
     (void)edit_shuffle_outfits(s, "all");
     const auto before = revision;
-    check_shuffle_room(s);
-    check(!s.shuffle_loaded_only && !told(), "The player was told with room to spare");
-
-    limit.taken = 18432; // 90%
-    check_shuffle_room(s);
-    check(s.shuffle_loaded_only && told() == 1 && revision == before && s.shuffle_mode == ShuffleMode::everything,
-          "Near the texture limit the player was not told once, or everyone was re-dressed");
-    check_shuffle_room(s);
-    limit.taken = 17800; // under 90%, not well under (85%)
-    check_shuffle_room(s);
-    limit.taken = 18432;
-    check_shuffle_room(s);
-    check(told() == 1, "The notice repeated around the line");
+    check(s.shuffle_mode == ShuffleMode::everything && revision == before, "A mode re-dressed at once");
 
     const auto epoch = s.shuffle_epoch;
     // A reroll is a new epoch; render re-dresses players in turn (shuffle_redress_interval_us),
     // so their outfit revision is left alone.
     check(edit_shuffle_outfits(s, "reroll") == "Everyone's items were shuffled again." && s.shuffle_epoch != epoch &&
               revision == before,
-          "A reroll near the texture limit was refused");
+          "A reroll was refused, or re-dressed at once");
     (void)edit_shuffle_outfits(s, "missing");
-    check(s.shuffle_mode == ShuffleMode::not_installed, "A mode near the texture limit was refused");
+    check(s.shuffle_mode == ShuffleMode::not_installed, "A mode was refused");
     // Mod items only is apart from the mode: either changes without the other.
     check(edit_shuffle_mods_only(s, "on") == "Shuffled outfits pick only items a mod installed." && s.shuffle_mods_only &&
               s.shuffle_mode == ShuffleMode::not_installed && revision == before,
@@ -673,20 +649,6 @@ void shuffle_room_checks() {
     check(edit_shuffle_mods_only(s, "maybe").starts_with("Use on, off") && s.shuffle_mods_only, "A bad word changed mod items only");
     (void)edit_shuffle_mods_only(s, "toggle");
     check(!s.shuffle_mods_only, "Mod items only did not toggle");
-    (void)edit_shuffle_outfits(s, "missing");
-
-    limit.taken = 1000; // well under: told again next time
-    check_shuffle_room(s);
-    check(!s.shuffle_loaded_only, "Well under the limit the notice was not re-armed");
-    limit.taken = 18432;
-    check_shuffle_room(s);
-    check(told() == 2, "The player was not told again after use fell and rose");
-
-    s.shuffle_loaded_only = false;
-    limit.known = false, limit.taken = 20480;
-    check_shuffle_room(s);
-    check(!s.shuffle_loaded_only, "The player was told before the game's texture streaming was there");
-    limit = {};
 }
 // Linked throwdowns travel through the host like chat: each message reaches every
 // other player exactly once, never its sender, and never another world.
@@ -2528,7 +2490,7 @@ int main(int argc, char **argv) {
         dingosdk::multiplayer::mesh_checks();
         dingosdk::multiplayer::throwdown_routing_checks();
         dingosdk::multiplayer::typing_checks();
-        dingosdk::multiplayer::shuffle_room_checks();
+        dingosdk::multiplayer::shuffle_setting_checks();
         dingosdk::multiplayer::party_checks();
         dingosdk::multiplayer::role_checks();
         dingosdk::multiplayer::global_ban_checks();

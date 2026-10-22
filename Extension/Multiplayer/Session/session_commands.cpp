@@ -701,26 +701,8 @@ bool own_mark_command(std::string_view action) {
 }
 } // namespace
 std::string session_detail::shuffle_state(const Session &s) {
-    return std::format("mode {}, {}, epoch {}{}", shuffle_mode_word(s.shuffle_mode),
-                       s.shuffle_mods_only ? "mod items only" : "every item", s.shuffle_epoch,
-                       s.shuffle_loaded_only ? ", loaded items only" : "");
-}
-void session_detail::check_shuffle_room(Session &s) {
-    if (s.shuffle_mode == ShuffleMode::off) return;
-    const auto use = texture_handle_limit::use();
-    if (!use.known) return;
-    if (s.shuffle_loaded_only) {
-        // Told again only once well clear of the line, so the notice does not repeat around it.
-        if (std::uint64_t{use.taken} * 100 < std::uint64_t{use.limit} * (shuffle_texture_ceiling - 5)) s.shuffle_loaded_only = false;
-        return;
-    }
-    if (shuffle_texture_room(use.taken, use.limit)) return;
-    s.shuffle_loaded_only = true;
-    logging::log(logging::Level::info, logging::Channel::runtime,
-                 "Multiplayer: shuffled outfits pick only items already loaded ({}), with {} of {} streamed textures in use.",
-                 shuffle_state(s), use.taken, use.limit);
-    add_chat(s, 0, "ReSkate",
-             "The game is close to its limit of textures, so shuffled outfits now only use items the game has already loaded.");
+    return std::format("mode {}, {}, epoch {}", shuffle_mode_word(s.shuffle_mode),
+                       s.shuffle_mods_only ? "mod items only" : "every item", s.shuffle_epoch);
 }
 bool queue_command(std::string_view action, std::string_view argument, std::string_view password) {
     if (launcher::offline_mode() && !own_mark_command(action)) return false;
