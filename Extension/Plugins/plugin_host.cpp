@@ -316,6 +316,11 @@ void Host::follow_game() {
         }
     if (wants("events.skater"))
         for (const auto& launch : game.take_launches()) each([&](Plugin& plugin, const std::string&) { plugin.launched(launch); });
+    // The camera height button asking the plugin in its cycle to start or stop its camera.
+    for (const auto& news : game.take_camera_cycle())
+        each([&](Plugin& plugin, const std::string&) {
+            if (plugin.id() == news.plugin) plugin.game_event("camera_cycle", "camera", Json(news.enter ? "enter" : "leave"));
+        });
     // Touching (reskate.session.touch): the bodies read once for every plugin that has it on.
     {
         std::optional<std::vector<Body>> list;
@@ -377,6 +382,20 @@ void Host::follow_game() {
             throwdown_active_ = active;
             each([&](Plugin& plugin, const std::string&) { plugin.throwdown_phase(active ? "started" : "ended"); });
         }
+    }
+    // Answers to a server copy's polls (server.poll), and polls that closed unanswered, to the
+    // plugin that asked.
+    for (const auto& news : game.take_poll_news()) {
+        auto data = Json::object();
+        data["id"] = static_cast<double>(news.id);
+        data["player"] = std::to_string(news.player);
+        if (news.answer) {
+            data["answer"] = static_cast<double>(news.answer);
+            data["text"] = news.text;
+        } else data["why"] = news.why;
+        each([&](Plugin& plugin, const std::string&) {
+            if (plugin.id() == news.plugin) plugin.game_event(news.answer ? "poll_answer" : "poll_closed", "server", data);
+        });
     }
     for (const auto& [plugin, action] : game.take_presses())
         if (auto* entry = find(plugin); entry && entry->plugin) {

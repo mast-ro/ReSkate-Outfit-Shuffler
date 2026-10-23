@@ -215,6 +215,14 @@ std::optional<std::array<float, 3>> Host::player_position(std::uint64_t steam_id
     return std::nullopt;
 }
 
+std::vector<Host::SkaterPose> Host::skater_poses() const {
+    std::vector<SkaterPose> list;
+    for (const auto &[id, guest] : guests_)
+        if (guest && guest->handshaken && guest->world_ready && guest->latest_root && guest->pose_arrival && now_ >= guest->pose_arrival)
+            list.push_back({id, *guest->latest_root, now_ - guest->pose_arrival});
+    return list;
+}
+
 // A player without the map is downloading it: the clock they are loading against starts over
 // each time they say so, for as long as map_fetch_limit_us from the first time. A slot is still
 // never held for good, and a player who stops saying it has the usual time to load.
@@ -232,6 +240,11 @@ void Host::fetching(Guest &guest) {
 }
 std::string Host::invite() const { return format_invite({id_, secret_}); }
 std::string Host::map_name() const { return map_label(config_.map); }
+std::string Host::map_level() const {
+    const auto destination = map_destination(config_.map);
+    const auto split = destination.find('|');
+    return split == std::string::npos ? destination : destination.substr(split + 1);
+}
 std::string Host::wire_map_label() const { // players without the map's mod still see its name
     auto label = map_name();
     cut_text(label, max_member_name);
@@ -810,11 +823,13 @@ void Host::send_roster() {
         if (m.party && std::none_of(p.members.begin(), p.members.end(),
                                     [&](const Member &o) { return o.party == m.party && o.party_leader; }))
             m.party_leader = true; // the first listed member of a party missing its leader
-    // An announcement for one player: everyone else's roster goes without it. And a player with
-    // locked tools is told those are off for them. Everyone else gets the same roster; players
-    // whose roster differs in the same way share one.
+    // An announcement for one player: everyone else's roster goes without it. A player with
+    // locked tools is told those are off for them, and one with a plugin's card or poll is shown
+    // it (by its id) over the server's. Everyone else gets the same roster; players whose roster
+    // differs in the same way share one.
     struct Variant {
         bool noclip{}, no_bail{}, boosts{}, ollies{}, enforce_tuning{}, announcement{};
+        std::uint32_t plugin_card{}, plugin_poll{};
         auto operator<=>(const Variant &) const = default;
     };
     const Variant common{config_.noclip, config_.no_bail, config_.boosts, true, config_.enforce_tuning, !announcement_for_};
@@ -824,6 +839,8 @@ void Host::send_roster() {
         if (!guest->handshaken) continue;
         auto variant = common;
         variant.announcement = !announcement_for_ || id == announcement_for_;
+        if (const auto card = plugin_cards_.find(id); card != plugin_cards_.end()) variant.plugin_card = card->second.card.id;
+        if (const auto poll = plugin_polls_.find(id); poll != plugin_polls_.end()) variant.plugin_poll = poll->second.id;
         if (const auto locks = locks_of(id)) {
             // Without "movement" (send_permissions), the tools their role gives are said here instead.
             const bool movement = (locks & lock_movement) && has(id, multiplayer::role_movement);
@@ -840,6 +857,7 @@ void Host::send_roster() {
         others.insert(id);
     }
     const auto shown = p.announcement;
+    const auto vote = p.vote;
     if (announcement_for_) p.announcement = {};
     broadcast(p, true, false, 0, nullptr, others.empty() ? nullptr : &others);
     for (const auto &[variant, players] : variants) {
@@ -849,6 +867,9 @@ void Host::send_roster() {
         p.guest_ollies = variant.ollies;
         p.enforce_tuning = variant.enforce_tuning;
         p.announcement = variant.announcement ? shown : multiplayer::ServerAnnouncement{};
+        p.vote = vote;
+        // The same card and poll ids: the same card and poll, so any of these players' is theirs.
+        if (variant.plugin_card || variant.plugin_poll) plugin_screens_roster(*players.begin(), p.announcement, p.vote);
         broadcast(p, true, false, 0, &players);
     }
     roster_dirty_ = false;
@@ -1018,6 +1039,7 @@ void Host::drop(std::uint64_t id, const std::string &reason, const std::string &
         guest->sound_sender.forget(id);
     }
     party_left(id, name);
+    plugin_screens_left(id);
     // Their vote cooldown stays (tick() drops it once it has run out): leaving and coming
     // back does not let a player start another vote sooner.
     // One voter fewer, or the player a kick vote was about. Counted in tick(): a passing kick
@@ -1418,6 +1440,15 @@ void Host::receive(std::uint64_t peer, std::span<const std::uint8_t> bytes, std:
     if (!link->world_ready) return;
     if (!routed_source(p, link->member, peer, true, id_)) return;
     if (p.kind == PacketKind::away) return drop(peer, "A player ended their session.");
+    // At their game though their skater may stand still (a plugin's drone): their time away starts
+    // again. Counted once in present_least_us, so a flood of them does nothing more.
+    if (p.kind == PacketKind::present) {
+        if (link->present_at && now_ < link->present_at + multiplayer::present_least_us) return;
+        link->present_at = now_;
+        link->last_packet = now_;
+        active(*link);
+        return;
+    }
     if (p.kind == PacketKind::objects) {
         const auto before = link->objects.revision();
         if (link->objects.receive(p.objects) == ObjectState::Result::invalid)
@@ -1499,8 +1530,9 @@ void Host::receive_cosmetics() {
 
 // Players who have been away longer than the server allows ("afk_kick_minutes") are removed,
 // with a warning a minute before. Away is doing nothing a player at their game does: not
-// moving, speaking, typing in chat or changing their objects. Admins stay, and so does anyone
-// whose game is still loading the map.
+// moving, speaking, typing in chat, changing their objects or working the controls (their game's
+// presence notice, PacketKind::present). Admins stay, and so does anyone whose game is still
+// loading the map.
 void Host::remove_away() {
     if (!config_.afk_kick) return;
     const auto limit = static_cast<std::uint64_t>(config_.afk_kick) * 60000000;
