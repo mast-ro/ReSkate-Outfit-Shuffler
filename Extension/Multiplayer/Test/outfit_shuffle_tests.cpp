@@ -132,8 +132,10 @@ int main() {
     // Which slots each mode shuffles. Slots: a top this PC has, bottoms it lacks (the stand-in is
     // in), a hat it lacks with no stand-in (empty), and a slot the player left empty.
     constexpr std::uint32_t top_slot = 0xac4c6e13, bottoms_slot = 0xc06aa817, hat_slot = 0xac3d4305, shoes_slot = 0x35c5f429;
-    check(shuffles_slot(top_slot) && shuffles_slot(0x0add98be) && !shuffles_slot(11) && !shuffles_slot(0),
-          "Only the listed slots are shuffled");
+    constexpr std::uint32_t hair_slot = 0x6a8c54b4, eyes_slot = 0xac4493c1; // cust_scalpHair, cust_eyes: never shuffled
+    check(shuffles_slot(top_slot) && shuffles_slot(0x0add98be) && shuffles_slot(11) && !shuffles_slot(hair_slot) &&
+              !shuffles_slot(eyes_slot) && !shuffles_slot(0x3ac1d7f4),
+          "Every slot is shuffled but the listed ones");
     {
         CosmeticRecipe r;
         r.items = {{top_slot, "Own_TopShirt_A", {}}, {bottoms_slot, "Default_Pants", {}}, {hat_slot, "", {}}, {shoes_slot, "", {}}};
@@ -146,14 +148,14 @@ int main() {
         check(shuffle_slots(ShuffleMode::off, r, lacking) == std::vector<bool>(4, false), "Off shuffles no slot");
         check(shuffle_slots(ShuffleMode::everything, r, {true}) == std::vector<bool>(4, false),
               "A lacking list of another size shuffles nothing");
-        // A slot not in the list keeps its item, or its stand-in, in either mode.
-        auto unlisted = r;
-        unlisted.items[0].slot = 11;
-        unlisted.items[1].slot = 12;
-        check(shuffle_slots(ShuffleMode::everything, unlisted, lacking) == std::vector<bool>({false, false, true, false}),
-              "Everything leaves a worn slot that is not listed alone");
-        check(shuffle_slots(ShuffleMode::not_installed, unlisted, lacking) == std::vector<bool>({false, false, true, false}),
-              "Not installed leaves a lacking slot that is not listed with its stand-in");
+        // A slot in the never-shuffled list keeps its item, or its stand-in, in either mode.
+        auto kept = r;
+        kept.items[0].slot = hair_slot;
+        kept.items[1].slot = eyes_slot;
+        check(shuffle_slots(ShuffleMode::everything, kept, lacking) == std::vector<bool>({false, false, true, false}),
+              "Everything leaves a worn slot that is never shuffled alone");
+        check(shuffle_slots(ShuffleMode::not_installed, kept, lacking) == std::vector<bool>({false, false, true, false}),
+              "Not installed leaves a lacking slot that is never shuffled with its stand-in");
         // Fed to shuffle_recipe, "everything" moves a top this PC has; "not installed" keeps it.
         auto every = r, only_missing = r;
         const std::vector<std::uint32_t> kinds{tops, bottoms, hats, shoes};
