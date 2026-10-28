@@ -1,6 +1,7 @@
 #include "skater_animation.h"
 #include "Engine/Core/Log/logging.h"
 #include "Engine/Game/Build/20260929/no_bail.h"
+#include "Engine/Game/Build/20260929/native_skater.h"
 #include "Engine/Game/Build/20260929/skater_state.h"
 #include "Extension/Multiplayer/Remote/native_pose_layout.h"
 #include "Extension/Multiplayer/Remote/native_skater.h"
@@ -292,6 +293,15 @@ std::atomic<double> room_seen_at{-1e9}, room_restore_until{};
 std::mutex room_facing_mutex;
 Quat room_facing{0, 0, 0, 1};
 bool room_facing_valid{};
+// Separate from the rig-writing plan: observing a menu pose never takes its ownership.
+std::atomic<double> preview_until{};
+struct PreviewSample {
+    Joint place;
+    double at{-1e9};
+    std::uint64_t sequence{};
+};
+std::mutex preview_mutex;
+std::array<PreviewSample, 2> preview_samples;
 // The joints asked for as last evaluated (joint()), for the client thread.
 std::mutex joints_mutex;
 std::vector<std::pair<std::uint16_t, Joint>> joints_now;
@@ -347,6 +357,25 @@ struct Live {
 Live& live() {
     static auto* l = new Live;
     return *l;
+}
+void observe_preview(std::uintptr_t animation_interface, bool skater) {
+    const double now = now_seconds();
+    if (now > preview_until.load(std::memory_order_acquire) || animation_interface <= addr::native_skater::render_animation_interface_offset) return;
+    const auto layout = multiplayer::read_native_pose_layout(peek, live().base.load(std::memory_order_acquire), animation_interface - addr::native_skater::render_animation_interface_offset, 512);
+    if (!layout.buffer || layout.count != (skater ? skeleton_joints : board_bones)) return;
+    std::array<NativeBone, 4> bones{};
+    if (!peek(layout.buffer, bones.data(), sizeof(bones))) return;
+    auto place = compose(joint_of(bones[0]), joint_of(bones[1]));
+    if (!skater) place = compose(compose(place, joint_of(bones[2])), joint_of(bones[3]));
+    if (!finite(place)) return;
+    // The same measured room bounds used by hide_in_room; gameplay rigs are excluded.
+    for (std::size_t i = 0; i < 3; ++i)
+        if (!(std::abs(place.position[i] - room_spot[i]) < room_reach[i])) return;
+    std::lock_guard lock(preview_mutex);
+    auto& sample = preview_samples[skater ? 1 : 0];
+    sample.place = place;
+    sample.at = now;
+    ++sample.sequence;
 }
 // The pose to draw, from the animation thread to the render publication.
 struct Pending {
@@ -759,18 +788,26 @@ void on_animation(std::uintptr_t component) noexcept {
                 last = to;
             }
         };
-        // Joints turned and scaled, after the clip; then something carried; then an arm reaching. Each
-        // goes into the pose drawn, the pose sent, or both (Shown), and its joints join what is written.
+        // Joints turned, scaled and moved, or set to a place (pose_place.h), after the clip; then something
+        // carried; then an arm reaching. Each goes into the pose drawn, the pose sent, or both (Shown), and
+        // its joints join what is written (a joint's children too, when they are kept where they were).
         const auto pose_joints = [&](std::vector<Joint>& pose, std::size_t& first, std::size_t& last) {
             const float w = std::clamp(snap->offsets_weight, 0.0f, 1.0f);
+            thread_local std::vector<pose_place::Kept> kept;
             for (const auto& o : snap->offsets) {
                 if (o.joint < 2 || o.joint >= layout.count) continue;
+                if (o.keep_children) pose_place::keep(pose, o.joint, kept);
                 auto& j = pose[o.joint];
                 j.rotation = normalised(multiply(j.rotation, slerp(Quat{0, 0, 0, 1}, o.rotation, w)));
                 // Never quite 0: a joint at scale 0 has no inverse. This small, it is as good as gone.
                 const float s = std::max(1.0f + (o.scale - 1.0f) * w, smallest_scale);
                 for (auto& k : j.scale) k *= s;
                 for (std::size_t a = 0; a < 3; ++a) j.position[a] += o.offset[a] * w;
+                if (o.place) pose_place::apply(pose, o.joint, *o.place, w);
+                if (o.keep_children) {
+                    pose_place::put_back(pose, o.joint, kept);
+                    for (const auto& k : kept) widen(first, last, k.joint, k.joint + 1u);
+                }
                 widen(first, last, o.joint, o.joint + 1u);
             }
         };
@@ -912,6 +949,12 @@ void on_animation(std::uintptr_t component) noexcept {
 }
 
 // What other players get of the local skater: the clip, as drawn here.
+// What the others are sent of a joint: the pose's scale with its place, since a place under a scaled
+// joint (keep_children, or one placed relative to another joint or the world) is worked out with that
+// scale in it; sent without it, the joint landed up to a thousand times its distance away. And no
+// joint further from its parent than any part of a body is: a place may be far off in the parent's
+// frame, and the others would draw the skater's arms and head across the map.
+constexpr float sent_scale_floor = 0.001f, sent_scale_ceiling = 10.0f, farthest_sent_joint = 4.0f;
 void on_send(std::uintptr_t component, std::vector<multiplayer::Transform>& skater) noexcept {
     try {
         auto& sp = sent_pose();
@@ -920,7 +963,12 @@ void on_send(std::uintptr_t component, std::vector<multiplayer::Transform>& skat
         for (std::uint32_t i = sp.first; i < sp.last; ++i) {
             const auto& j = sp.joints[i - sp.first];
             skater[i].rotation = j.rotation;
-            skater[i].position = j.position;
+            auto position = j.position;
+            const float length = std::sqrt(position[0] * position[0] + position[1] * position[1] + position[2] * position[2]);
+            if (length > farthest_sent_joint)
+                for (auto& axis : position) axis *= farthest_sent_joint / length;
+            skater[i].position = position;
+            for (std::size_t a = 0; a < 3; ++a) skater[i].scale[a] = std::clamp(j.scale[a], sent_scale_floor, sent_scale_ceiling);
         }
     } catch (...) {
     }
@@ -982,6 +1030,7 @@ void on_render(std::uintptr_t animation_interface) noexcept {
     try {
         const auto holder = read<std::uintptr_t>(component + 0xa0);
         if (!holder || !*holder || animation_interface != *holder + 0xc0) {
+            observe_preview(animation_interface, true);
             hide_in_room(animation_interface, true);
             SetLastError(error);
             return;
@@ -1052,6 +1101,7 @@ void on_board_render(std::uintptr_t animation_interface, std::uintptr_t /*render
     try {
         const auto bh = l.board_holder.load(std::memory_order_acquire);
         if (!bh || animation_interface != bh + 0xc0) {
+            observe_preview(animation_interface, false);
             hide_in_room(animation_interface, false);
             SetLastError(error);
             return;
@@ -1179,6 +1229,14 @@ void carry(std::optional<carry::Goal> goal, bool push_straightens, Shown shown) 
     plan_draft.carry_until = plan_draft.carry ? now_seconds() + 0.3 : 0;
     publish();
 }
+std::optional<PreviewPose> preview_pose(bool skater) {
+    const double now = now_seconds();
+    preview_until.store(now + 0.5, std::memory_order_release);
+    std::lock_guard lock(preview_mutex);
+    const auto& sample = preview_samples[skater ? 1 : 0];
+    if (now - sample.at > 0.25) return std::nullopt;
+    return PreviewPose{sample.place, now - sample.at, sample.sequence};
+}
 std::optional<Joint> joint(std::uint16_t index) {
     if (index >= 395) return std::nullopt;
     const double now = now_seconds();
@@ -1276,7 +1334,7 @@ void tick(std::uintptr_t base, std::uintptr_t component, bool allowed) {
     const double now = now_seconds();
     const bool wanted = plan_draft.play || !plan_draft.replacements.empty() || recording() ||
                         (plan_draft.reach && now < plan_draft.reach_until) || (plan_draft.carry && now < plan_draft.carry_until) ||
-                        now < plan_draft.joints_until ||
+                        now < plan_draft.joints_until || now < preview_until.load(std::memory_order_acquire) ||
                         (!plan_draft.offsets.empty() && now < plan_draft.offsets_until) || room_watch.load(std::memory_order_acquire) ||
                         room_shown.load(std::memory_order_acquire) || now < room_restore_until.load(std::memory_order_acquire);
     if (wanted && !hooked && base) {
