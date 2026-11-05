@@ -1,3 +1,10 @@
+DEPRECATED - This can now be achieved using [Cosmetic Roulette by neekgate](https://thunderstore.io/c/reskate/p/neekgate/Cosmetic_Roulette/) plugin.
+
+
+
+
+
+
 # ReSkate Outfit Shuffler
 
 A mod for [ReSkate v2.1.2](https://github.com/Dingo-Shenanigans/ReSkate) that shows other players' outfits
